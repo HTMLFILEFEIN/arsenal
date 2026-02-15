@@ -10,247 +10,258 @@ local isArsenal = game.PlaceId == ARSENAL_PLACE_ID
 
 local ESP_ENABLED = true
 local HoldingRMB = false
-local OUTER_FOV = 20  -- Outer awareness circle
-local AIMBOT_FOV = 10  -- Aimbot detection circle
-local currentTarget = nil
+
+local OUTER_FOV_DEG = 20
+local AIMBOT_FOV_DEG = 10
 local STICKY_THRESHOLD = 0.8
 
--- Outer FOV Circle (outline)
-local fovCircle = Drawing.new("Circle")
-fovCircle.Color = Color3.fromRGB(255, 255, 255)
-fovCircle.Thickness = 2
-fovCircle.NumSides = 64
-fovCircle.Radius = 0
-fovCircle.Filled = false
-fovCircle.Transparency = 0
-fovCircle.Visible = false
+local currentTarget = nil
 
--- Inner Aimbot FOV Circle (filled)
-local aimbotCircle = Drawing.new("Circle")
-aimbotCircle.Color = Color3.fromRGB(255, 255, 255)
-aimbotCircle.Thickness = 1
-aimbotCircle.NumSides = 64
-aimbotCircle.Radius = 0
-aimbotCircle.Filled = true
-aimbotCircle.Transparency = 0.6  -- Semi-transparent white
-aimbotCircle.Visible = false
+-- Outer circle (awareness)
+local outerCircle = Drawing.new("Circle")
+outerCircle.Color = Color3.fromRGB(255, 255, 255)
+outerCircle.Thickness = 2
+outerCircle.NumSides = 100
+outerCircle.Radius = 0
+outerCircle.Filled = false
+outerCircle.Transparency = 0
+outerCircle.Visible = false
+
+-- Inner circle (aimbot zone)
+local innerCircle = Drawing.new("Circle")
+innerCircle.Color = Color3.fromRGB(180, 180, 255)
+innerCircle.Thickness = 1.5
+innerCircle.NumSides = 100
+innerCircle.Radius = 0
+innerCircle.Filled = false
+innerCircle.Transparency = 0
+innerCircle.Visible = false
+
+local function shouldShowESP(player)
+    if player == LocalPlayer then return false end
+    if not ESP_ENABLED then return false end
+    if isArsenal and player.Team == LocalPlayer.Team then return false end
+    return true
+end
 
 local function updateESPVisibility(player)
-    if player == LocalPlayer or not player.Character then return end
+    if not player.Character then return end
     
-    local highlight = player.Character:FindFirstChild("WhiteChamsESP")
-    local head = player.Character:FindFirstChild("Head")
-    local billboard = head and head:FindFirstChild("DisplayNameESP")
-    
-    local shouldShow = ESP_ENABLED and (not isArsenal or player.Team ~= LocalPlayer.Team)
-    
-    if highlight then
-        highlight.Enabled = shouldShow
+    local hl = player.Character:FindFirstChild("WhiteChamsESP")
+    if hl then
+        hl.Enabled = shouldShowESP(player)
     end
-    if billboard then
-        billboard.Enabled = shouldShow
+    
+    local head = player.Character:FindFirstChild("Head")
+    if head then
+        local bb = head:FindFirstChild("NameESP")
+        if bb then
+            bb.Enabled = shouldShowESP(player)
+        end
     end
 end
 
 local function createESP(player)
     if player == LocalPlayer then return end
     
-    local function onCharacterAdded(character)
-        local oldHighlight = character:FindFirstChild("WhiteChamsESP")
-        if oldHighlight then oldHighlight:Destroy() end
-        local head = character:FindFirstChild("Head")
-        local oldBillboard = head and head:FindFirstChild("DisplayNameESP")
-        if oldBillboard then oldBillboard:Destroy() end
+    local function onCharAdded(char)
+        task.wait(0.1)
         
+        -- Clean old
+        local oldHl = char:FindFirstChild("WhiteChamsESP")
+        if oldHl then oldHl:Destroy() end
+        
+        local head = char:FindFirstChild("Head")
+        if head and head:FindFirstChild("NameESP") then
+            head.NameESP:Destroy()
+        end
+        
+        -- White chams
         local highlight = Instance.new("Highlight")
         highlight.Name = "WhiteChamsESP"
-        highlight.FillColor = Color3.new(1, 1, 1)
-        highlight.OutlineColor = Color3.new(1, 1, 1)
-        highlight.FillTransparency = 0.4
+        highlight.FillColor = Color3.new(1,1,1)
+        highlight.OutlineColor = Color3.new(1,1,1)
+        highlight.FillTransparency = 0.45
         highlight.OutlineTransparency = 0
-        highlight.Enabled = false
-        highlight.Parent = character
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.Adornee = char
+        highlight.Parent = char
+        highlight.Enabled = shouldShowESP(player)
         
-        local newHead = character:WaitForChild("Head")
+        -- Name tag
+        local bb = Instance.new("BillboardGui")
+        bb.Name = "NameESP"
+        bb.Size = UDim2.new(0, 220, 0, 50)
+        bb.StudsOffset = Vector3.new(0, 3.2, 0)
+        bb.AlwaysOnTop = true
+        bb.LightInfluence = 0
+        bb.Enabled = shouldShowESP(player)
+        bb.Parent = char:WaitForChild("Head")
         
-        local billboardGui = Instance.new("BillboardGui")
-        billboardGui.Name = "DisplayNameESP"
-        billboardGui.Size = UDim2.new(0, 200, 0, 50)
-        billboardGui.StudsOffset = Vector3.new(0, 3, 0)
-        billboardGui.LightInfluence = 0
-        billboardGui.AlwaysOnTop = true
-        billboardGui.Enabled = false
-        billboardGui.Parent = newHead
+        local txt = Instance.new("TextLabel")
+        txt.Size = UDim2.new(1,0,1,0)
+        txt.BackgroundTransparency = 1
+        txt.Text = player.DisplayName
+        txt.TextColor3 = Color3.new(1,1,1)
+        txt.TextStrokeTransparency = 0.4
+        txt.TextStrokeColor3 = Color3.new(0,0,0)
+        txt.Font = Enum.Font.GothamBold
+        txt.TextSize = 16
+        txt.TextXAlignment = Enum.TextXAlignment.Center
+        txt.Parent = bb
         
-        local textLabel = Instance.new("TextLabel")
-        textLabel.Size = UDim2.new(1, 0, 1, 0)
-        textLabel.BackgroundTransparency = 1
-        textLabel.Text = player.DisplayName
-        textLabel.TextColor3 = Color3.new(1, 1, 1)
-        textLabel.TextStrokeTransparency = 0
-        textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-        textLabel.Font = Enum.Font.GothamBold
-        textLabel.TextSize = 16
-        textLabel.TextXAlignment = Enum.TextXAlignment.Center
-        textLabel.Parent = billboardGui
-        
-        local nameUpdateConnection = player:GetPropertyChangedSignal("DisplayName"):Connect(function()
-            if textLabel then textLabel.Text = player.DisplayName end
+        local nameConn = player:GetPropertyChangedSignal("DisplayName"):Connect(function()
+            txt.Text = player.DisplayName
         end)
         
-        local ancestryChanged = character.AncestryChanged:Connect(function()
-            if not character.Parent then
+        local ancestryConn = char.AncestryChanged:Connect(function()
+            if not char.Parent then
                 highlight:Destroy()
-                billboardGui:Destroy()
-                if nameUpdateConnection then nameUpdateConnection:Disconnect() end
-                ancestryChanged:Disconnect()
+                bb:Destroy()
+                nameConn:Disconnect()
+                ancestryConn:Disconnect()
             end
         end)
-        
-        updateESPVisibility(player)
     end
     
-    player.CharacterAdded:Connect(onCharacterAdded)
-    if player.Character then onCharacterAdded(player.Character) end
+    player.CharacterAdded:Connect(onCharAdded)
+    if player.Character then onCharAdded(player.Character) end
     
+    -- Team change listener
     player:GetPropertyChangedSignal("Team"):Connect(function()
         updateESPVisibility(player)
     end)
 end
 
--- Aimbot Loop (10° inner FOV)
+-- Aimbot loop
 local function aimbotLoop()
-    if not ESP_ENABLED or not HoldingRMB then 
+    if not ESP_ENABLED or not HoldingRMB then
         currentTarget = nil
-        return 
+        return
     end
     
-    local localChar = LocalPlayer.Character
-    if not localChar or not localChar:FindFirstChild("HumanoidRootPart") then 
+    local myChar = LocalPlayer.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then
         currentTarget = nil
-        return 
+        return
     end
     
     local rayParams = RaycastParams.new()
+    rayParams.FilterDescendantsInstances = {myChar}
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-    rayParams.FilterDescendantsInstances = {localChar}
     
     local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    local aimbotRadius = (Camera.ViewportSize.X / 2) * (math.tan(math.rad(AIMBOT_FOV / 2)) / math.tan(math.rad(Camera.FieldOfView / 2)))
+    local innerRadiusPx = (Camera.ViewportSize.X / 2) * math.tan(math.rad(AIMBOT_FOV_DEG / 2)) / math.tan(math.rad(Camera.FieldOfView / 2))
     
     local closestHead = nil
-    local closestScreenDist = math.huge
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player == LocalPlayer then continue end
-        if isArsenal and player.Team == LocalPlayer.Team then continue end
+    local closestDist = math.huge
+    
+    for _, plr in Players:GetPlayers() do
+        if plr == LocalPlayer then continue end
+        if isArsenal and plr.Team == LocalPlayer.Team then continue end
         
-        local char = player.Character
+        local char = plr.Character
         if not char then continue end
         
-        local humanoid = char:FindFirstChild("Humanoid")
-        if not humanoid or humanoid.Health <= 0 then continue end
+        local hum = char:FindFirstChild("Humanoid")
+        if not hum or hum.Health <= 0 then continue end
         
         local head = char:FindFirstChild("Head")
         if not head then continue end
         
-        local screenPoint, inFront = Camera:WorldToViewportPoint(head.Position)
-        local screenPos = Vector2.new(screenPoint.X, screenPoint.Y)
-        local onScreen = inFront and screenPos.X >= 0 and screenPos.X <= Camera.ViewportSize.X and 
-                         screenPos.Y >= 0 and screenPos.Y <= Camera.ViewportSize.Y
+        local screen, onScreen = Camera:WorldToViewportPoint(head.Position)
+        local pos2d = Vector2.new(screen.X, screen.Y)
         
-        if onScreen then
-            local direction = head.Position - Camera.CFrame.Position
-            local raycastResult = workspace:Raycast(Camera.CFrame.Position, direction.Unit * direction.Magnitude, rayParams)
-            local visible = (not raycastResult or raycastResult.Instance:IsDescendantOf(char))
+        if onScreen and pos2d.X >= 0 and pos2d.X <= Camera.ViewportSize.X and pos2d.Y >= 0 and pos2d.Y <= Camera.ViewportSize.Y then
+            local dist = (pos2d - center).Magnitude
+            if dist > innerRadiusPx then continue end
             
-            if visible then
-                local screenDist = (screenPos - center).Magnitude
-                if screenDist < aimbotRadius and screenDist < closestScreenDist then
-                    closestScreenDist = screenDist
-                    closestHead = head
-                end
+            local dir = head.Position - Camera.CFrame.Position
+            local res = workspace:Raycast(Camera.CFrame.Position, dir.Unit * dir.Magnitude, rayParams)
+            local visible = not res or res.Instance:IsDescendantOf(char)
+            
+            if visible and dist < closestDist then
+                closestDist = dist
+                closestHead = head
             end
         end
     end
     
-    if not closestHead then 
+    if not closestHead then
         currentTarget = nil
-        return 
+        return
     end
     
-    -- Sticky Logic
-    local aimHead = closestHead
+    -- Sticky
+    local aimAt = closestHead
     if currentTarget and currentTarget.Parent then
-        local char = currentTarget.Parent
-        local player = Players:GetPlayerFromCharacter(char)
-        if player and player ~= LocalPlayer and (not isArsenal or player.Team ~= LocalPlayer.Team) then
-            local humanoid = char:FindFirstChild("Humanoid")
-            if humanoid and humanoid.Health > 0 then
-                local screenPoint, inFront = Camera:WorldToViewportPoint(currentTarget.Position)
-                if inFront then
-                    local screenPos = Vector2.new(screenPoint.X, screenPoint.Y)
-                    local onScreen = screenPos.X >= 0 and screenPos.X <= Camera.ViewportSize.X and 
-                                     screenPos.Y >= 0 and screenPos.Y <= Camera.ViewportSize.Y
-                    local screenDist = (screenPos - center).Magnitude
-                    if onScreen and screenDist < aimbotRadius then
-                        local direction = currentTarget.Position - Camera.CFrame.Position
-                        local raycastResult = workspace:Raycast(Camera.CFrame.Position, direction.Unit * direction.Magnitude, rayParams)
-                        local visible = (not raycastResult or raycastResult.Instance:IsDescendantOf(char))
-                        if visible and closestScreenDist >= (screenDist * STICKY_THRESHOLD) then
-                            aimHead = currentTarget
-                        end
+        local oldChar = currentTarget.Parent
+        local oldPlr = Players:GetPlayerFromCharacter(oldChar)
+        if oldPlr and oldPlr ~= LocalPlayer and (not isArsenal or oldPlr.Team ~= LocalPlayer.Team) then
+            local oldHum = oldChar:FindFirstChild("Humanoid")
+            if oldHum and oldHum.Health > 0 then
+                local oldScreen, oldOn = Camera:WorldToViewportPoint(currentTarget.Position)
+                local oldPos = Vector2.new(oldScreen.X, oldScreen.Y)
+                local oldDist = (oldPos - center).Magnitude
+                
+                if oldOn and oldDist <= innerRadiusPx then
+                    local dir = currentTarget.Position - Camera.CFrame.Position
+                    local res = workspace:Raycast(Camera.CFrame.Position, dir.Unit * dir.Magnitude, rayParams)
+                    local vis = not res or res.Instance:IsDescendantOf(oldChar)
+                    
+                    if vis and closestDist >= oldDist * STICKY_THRESHOLD then
+                        aimAt = currentTarget
                     end
                 end
             end
         end
     end
     
-    local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, aimHead.Position)
-    Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, 0.12)
+    local targetCF = CFrame.lookAt(Camera.CFrame.Position, aimAt.Position)
+    Camera.CFrame = Camera.CFrame:Lerp(targetCF, 0.12)
     
-    currentTarget = aimHead
+    currentTarget = aimAt
 end
 
--- FOV Circles Update Loop (BOTH ALWAYS VISIBLE when ESP on!)
+-- Circles
 RunService.Heartbeat:Connect(function()
     local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    fovCircle.Position = center
-    aimbotCircle.Position = center
+    outerCircle.Position = center
+    innerCircle.Position = center
     
-    local outerRadius = (Camera.ViewportSize.X / 2) * (math.tan(math.rad(OUTER_FOV / 2)) / math.tan(math.rad(Camera.FieldOfView / 2)))
-    fovCircle.Radius = math.floor(outerRadius)
+    local outerR = (Camera.ViewportSize.X / 2) * math.tan(math.rad(OUTER_FOV_DEG / 2)) / math.tan(math.rad(Camera.FieldOfView / 2))
+    outerCircle.Radius = math.floor(outerR)
     
-    local innerRadius = (Camera.ViewportSize.X / 2) * (math.tan(math.rad(AIMBOT_FOV / 2)) / math.tan(math.rad(Camera.FieldOfView / 2)))
-    aimbotCircle.Radius = math.floor(innerRadius)
+    local innerR = (Camera.ViewportSize.X / 2) * math.tan(math.rad(AIMBOT_FOV_DEG / 2)) / math.tan(math.rad(Camera.FieldOfView / 2))
+    innerCircle.Radius = math.floor(innerR)
     
-    fovCircle.Visible = ESP_ENABLED
-    aimbotCircle.Visible = ESP_ENABLED  -- NOW ALWAYS ON (with ESP)!
+    outerCircle.Visible = ESP_ENABLED
+    innerCircle.Visible = ESP_ENABLED
 end)
 
--- Apply ESP
-for _, player in ipairs(Players:GetPlayers()) do
-    createESP(player)
+-- Initialization
+for _, p in Players:GetPlayers() do
+    createESP(p)
 end
 Players.PlayerAdded:Connect(createESP)
 
 LocalPlayer:GetPropertyChangedSignal("Team"):Connect(function()
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            updateESPVisibility(player)
+    for _, p in Players:GetPlayers() do
+        if p ~= LocalPlayer then
+            updateESPVisibility(p)
         end
     end
     currentTarget = nil
 end)
 
--- Inputs
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
     if input.KeyCode == Enum.KeyCode.Insert then
         ESP_ENABLED = not ESP_ENABLED
         if not ESP_ENABLED then currentTarget = nil end
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer then
-                updateESPVisibility(player)
+        for _, p in Players:GetPlayers() do
+            if p ~= LocalPlayer then
+                updateESPVisibility(p)
             end
         end
     elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
